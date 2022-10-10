@@ -93,6 +93,7 @@ def matrix_transpose(matrix):
 
 ### first second
 ### third fourth
+### x and y are the line and column of the selected cut item
 def get_small_matrix_determinant_for_adj(matrix, x, y):
     terms = []
     for i in range(3):
