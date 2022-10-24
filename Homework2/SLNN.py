@@ -20,10 +20,9 @@ def read_data_sets():
 ### compute input as (bias = 1, atr.1, atr.2, ..., atr.n)
 def add_bias_to_inputs(inputs):
     input_list = np.insert(np.copy(inputs), 0, 1, axis=1)
-    # for input in input_list:
-    #     input = np.insert(input, 0, 1)
     return input_list
 
+### reformat labels: 0 / 1 for the specified digit instead of 0..9
 def transform_labels_for_digit(labels, digit):
     neuron_labels = []
     for label in labels:
@@ -33,25 +32,26 @@ def transform_labels_for_digit(labels, digit):
             neuron_labels += [0]
     return neuron_labels
 
-### activation function:
+### activation functions:
 def predict(input, weights):
     return (np.dot(input,weights) >= 0)
 
 def predict_likeliness(input, weights):
     return np.dot(input, weights)
 
+### accuracy for a model on a labeled input set
 def accuracy(inputs, weights, labels):
     correct = 0
-    preds = []
+    # preds = []
     for i in range(len(inputs)):
-        preds += [predict(inputs[i],weights)]
+        # preds += [predict(inputs[i],weights)]
         if predict(inputs[i],weights) == labels[i]:
             correct += 1
     # print("\nPredictions: ", preds)
     return correct/len(inputs)
 
-## epoch : pass through all dataset
-## iteration : pass through batch
+### epoch : pass through all dataset
+### iteration : pass through batch
 def train(inputs, labels, weights, epochs=10, learn_rate=0.15):
     prev_acc = -1
     for epoch in range(epochs):
@@ -60,8 +60,10 @@ def train(inputs, labels, weights, epochs=10, learn_rate=0.15):
         # print("\nWeights: ", weights)
         print("\nAccuracy: ", acc)
 
-        if acc == 1.00 or acc == prev_acc:
+        if acc == 1.00:
             break
+        # if prev_acc == acc:
+        #     break
         prev_acc = acc
 
         # MINIBATCH TRAINING:
@@ -82,6 +84,7 @@ def train(inputs, labels, weights, epochs=10, learn_rate=0.15):
 
     return weights
 
+### keep modifications in delta and at the end add them to the model
 def process_mini_batch(batch_inputs, batch_labels, weights, learn_rate):
     delta = np.array([0] * len(weights))
     for i in range(len(batch_inputs)):
@@ -92,9 +95,10 @@ def process_mini_batch(batch_inputs, batch_labels, weights, learn_rate):
 
 ## init weights for 784 inputs and 1 bias:
 def init_weights():
-    weights = 2*np.random.random((10,785)) - 1
+    weights = 2*np.random.random((10,785)) - 1 ### 10 neurons (-1,1)
     return weights
 
+## train all 10 neurons:
 def train_digits(train_inputs, train_labels, epochs, learn_rate):
     weights = init_weights()
     for i in range(10):
@@ -103,12 +107,14 @@ def train_digits(train_inputs, train_labels, epochs, learn_rate):
             train(train_inputs, digit_labels, weights[i], epochs, learn_rate)
     return weights
 
+## predict which digit is in the input based on the max value of prediction function
 def predict_digit(input, weights):
     predictions = []
     for i in range(10):
         predictions += [predict_likeliness(input, weights[i])]
     return predictions.index(max(predictions))
 
+## get accuracy on a testing dataset:
 def test_model(test_inputs, test_labels, weights):
     correct = 0
     for i in range(len(test_inputs)):
@@ -125,59 +131,39 @@ def print_model(weights, epochs, learn_rate):
         g.write(" ")
         g.write(str(learn_rate))
 
+## in validation phase tune epochs and learning rate to reach an accuracy
 def tune_hyperparameters(train_inputs, train_labels, valid_inputs, valid_labels, weights, epochs=10, learn_rate=0.15):
     while test_model(valid_inputs, valid_labels, weights) < 0.85:
         ## adjust hyperparams:
         epochs += 5
-        learn_rate = (learn_rate * 3)/ 4
+        learn_rate = (learn_rate * 2) / 3
         ## retrain model:
         weights = train_digits(train_inputs, train_labels, epochs, learn_rate)
     print_model(weights, epochs, learn_rate)
     return (weights, epochs, learn_rate)
         
-
+## Single-Layered Neuronal Network for digit classification:
 def main():
-    ###!!!! i forgot about bias in weights? compare input and wheight lengths
-    ###!!!! add validation test: modify learn_rate and epochs as follows:
-    ###     1.5 10 => 0.75 15 => fie 1.1 15 / fie 0.35 20 => ... based on accuracy
-    ###     print result (weights and hyperparams) to file
-    epochs = 10 # default:30
-    learn_rate = 0.15 # default:0.1
+    epochs = 10 
+    learn_rate = 0.15
     (train_set, valid_set, test_set) = read_data_sets()
 
+    ## Train phase with training dataset:
     train_inputs = add_bias_to_inputs(train_set[0])
     train_labels = train_set[1]
 
-    # weights = init_weights()
-    # weights = train(train_inputs,transform_labels_for_digit(train_labels,0),weights,epochs,learn_rate)
-    # print("Is 0?", predict(add_bias_to_inputs(valid_set[0])[18], weights))
-
     model_weights = train_digits(train_inputs, train_labels, epochs, learn_rate)
-    # for i in range(10):
-    #     print("Is ", i , "?")
-    #     print("Answer: ", predict(add_bias_to_inputs(valid_set[0])[18], model_weights[i]))
 
-
-    ## Tuning phase with validation test:
+    ## Tuning phase with validation dataset:
     valid_inputs = add_bias_to_inputs(valid_set[0])
     valid_labels = valid_set[1]
     (model_weights, epochs, learn_rate) = tune_hyperparameters(train_inputs, train_labels, valid_inputs, valid_labels, model_weights,\
                                             epochs, learn_rate)
 
-    ## Testin phase for accuracy:
+    ## Testing phase for accuracy:
     test_inputs = add_bias_to_inputs(test_set[0])
     test_labels = test_set[1]
     print("Model accuracy: ", test_model(test_inputs, test_labels, model_weights))
-
-    ## a ramas sa fac wheights pentru fiecare digit si sa antrenez 
-    ##      si dupa sa folosesc setul de validare pentru ajustarea hiperparametrilor
-    ##      iar la final sa folosesc test setul pentru verificare
-    ## eventual sa ma folosesc si de mini batches pentru bonus
-
-
-### Validation set: tune hyperparameters: learn_rate, number of iterations, initial weights
-
-### scale learning rate by 1/sqrt(n) where n is batch size
 
 main()
 
