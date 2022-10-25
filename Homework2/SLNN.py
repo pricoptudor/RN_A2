@@ -67,20 +67,20 @@ def train(inputs, labels, weights, epochs=10, learn_rate=0.15):
         prev_acc = acc
 
         # MINIBATCH TRAINING:
-        minibatch_size = 5
-        for i in range(minibatch_size):
-            weights = process_mini_batch(inputs[i::minibatch_size], labels[i::minibatch_size],\
-                weights, learn_rate)
+        # minibatch_size = 5
+        # for i in range(minibatch_size):
+        #     weights = process_mini_batch(inputs[i::minibatch_size], labels[i::minibatch_size],\
+        #         weights, learn_rate)
 
         # ONLINE TRAINING:
-        # for i in range(len(inputs)):
-        #     pred = predict(inputs[i],weights)
-        #     error = labels[i] - pred
+        for i in range(len(inputs)):
+            pred = predict(inputs[i],weights)
+            error = labels[i] - pred
 
-        #     weights = weights + error*learn_rate*inputs[i]
-        #     # extremely slow: 
-        #     # for j in range(len(weights)):
-        #     #     weights[j] = weights[j] + (learn_rate*error*inputs[i][j])
+            weights = weights + error*learn_rate*inputs[i]
+            # extremely slow: 
+            # for j in range(len(weights)):
+            #     weights[j] = weights[j] + (learn_rate*error*inputs[i][j])
 
     return weights
 
@@ -112,7 +112,7 @@ def predict_digit(input, weights):
     predictions = []
     for i in range(10):
         predictions += [predict_likeliness(input, weights[i])]
-    return predictions.index(max(predictions))
+    return predictions.index(max(predictions)) ## argmax
 
 ## get accuracy on a testing dataset:
 def test_model(test_inputs, test_labels, weights):
@@ -120,7 +120,7 @@ def test_model(test_inputs, test_labels, weights):
     for i in range(len(test_inputs)):
         if predict_digit(test_inputs[i], weights) == test_labels[i]:
             correct += 1
-    return correct/len(test_inputs)
+    return 100*correct/len(test_inputs)
 
 def print_model(weights, epochs, learn_rate):
     with open('digit_model', 'w') as f:
