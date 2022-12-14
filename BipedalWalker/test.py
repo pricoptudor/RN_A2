@@ -30,8 +30,8 @@ class BipedalWalker:
 
 def policy(state, weights):
 	# print('Weights: ', weights.shape) # weights : (4, 24)
-	# print('State: ', state.shape)  # state : (24, 1)
-	return np.matmul(weights, state) 
+	# print('State: ', state.shape)  	# state : (24, 1)
+	return np.matmul(weights, state) 	# action : (4, 1)
 
 
 def test(env, policy, weights, episodes=100, normalizer=None):
@@ -43,7 +43,7 @@ def test(env, policy, weights, episodes=100, normalizer=None):
 		total_reward = 0.0
 		steps = 0
 
-		while not done and steps<5000:
+		while not done and steps<5000: ## 5000 is episode_length
 			env.render()
 			if normalizer:
 				state = normalizer.normalize(state)
