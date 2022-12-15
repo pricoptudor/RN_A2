@@ -33,7 +33,7 @@ class HP():
 	def __init__(self):
 		self.v = 0.03			# Noise in delta
 		self.N = 16				# No of perturbations
-		self.b = 16				# No of top performing directions (<= self.N)
+		self.b = 8				# No of top performing directions (<= self.N)
 		self.lr = 0.02			# Learning rate
 		self.normalizer = True	# Use normalizer
 
@@ -50,7 +50,7 @@ class Agent:
 		# print('State: ', state.shape)  				# state : (1, 24)
 		return np.matmul(weights, state.reshape(-1,1))	# action : (4, 1)
 
-	def test_env(self, env, policy, weights, normalizer=None, eval_policy=False):
+	def test_env(self, env, policy, weights, normalizer=None, test_only=False):
 		## policy is a function that takes (weights,state) as input and returns actions
 		state = env.reset()
 		done = False
@@ -60,12 +60,12 @@ class Agent:
 		while not done and steps<self.hp.episode_length:  # 5000 is episode length
 			# env.render()	## DON'T RENDER ENVIRONMENT AT TRAINING BRO
 			if normalizer:
-				if not eval_policy: normalizer.observe(state)
+				if not test_only: normalizer.observe(state)
 				state = normalizer.normalize(state)
 			action = policy(state, weights)
 			next_state, reward, done = env.step(action)
 
-			# Avoid local optimum (next_state[2] == velocity on x axis)
+			# Avoid being stuck (next_state[2] == velocity on x axis)
 			if abs(next_state[2]) < 0.001:
 				reward = -100
 				done = True
@@ -73,11 +73,13 @@ class Agent:
 			total_reward += reward
 			steps += 1
 			state = next_state
-		if eval_policy: return float(total_reward), steps # Return also the number of steps for evaluating the policy in plots
-		else: return float(total_reward)
+		
+		return float(total_reward)
 
 
 ### Normalizing the states ###
+## Ensures that policies put equal weight on every component of state 
+##		-> otherwise dramatic changes in small ranges will only barely affect computation
 class Normalizer():
 	def __init__(self, nb_inputs):
 		self.n = np.zeros(nb_inputs)
@@ -95,13 +97,20 @@ class Normalizer():
 	def normalize(self, inputs):
 		obs_mean = self.mean
 		obs_std = np.sqrt(self.var)
-		return (inputs - obs_mean) / obs_std
+		return (inputs - obs_mean) / obs_std ## here (2nd axis of enhancement over BRS)
 
 	def store(self):
 		np.savetxt('NormalizerMean.txt', self.mean)
 		np.savetxt('NormalizerVar.txt', self.var)
 
 ### ARS Algorithm ###
+## it explores policy spaces, other algorithms explore action spaces
+## (instead of analyzing the rewards it gets after each action,
+##		it analyzes the reward after a series of actions)
+
+## uses perceptron instead of deep neural net
+## adds tiny values to the weights along with the negative of that value to figure out if they help the agent get a bigger reward
+## the bigger the reward from a weight configuration, the bigger its influence on the adjustment of the weights
 class ARS:
 	def __init__(self):
 		self.hp = HP()
@@ -110,13 +119,16 @@ class ARS:
 		self.best_score = -1000
 		self.desired_score = 300
 		self.size = [self.env.action_space.shape[0], self.env.observation_space.shape[0]] # (4, 24)
-		self.weights = np.zeros(self.size)		# 𝜃 parameters
+		self.weights = np.zeros(self.size)		# 𝜃 parameters: shape (output_size, input_size)
 		if self.hp.normalizer: 
 			self.hp.normalizer = Normalizer([1,self.size[1]]) # (1, 24) -> normalizing the observation space
 		else: 
 			self.hp.normalizer=None
 		self.plot = ModelPlot()
 
+	# Sort rewards in descending order based on (r(𝜃+𝛎𝜹), r(𝜃-𝛎𝜹)) and use only top b rewards with their perturbations 𝜹
+	#	(for each iteration the small rewards will push down the average of collected rewards r(𝜃+𝛎𝜹), r(𝜃-𝛎𝜹))
+	#	(3rd axis of enhancement over BRS) - (when b==N the algorithm is the same as the one without this enhancement)
 	def sort_directions(self, reward_p, reward_n):
 		reward_max = [max(rp, rn) for rp, rn in zip(reward_p, reward_n)]
 
@@ -129,17 +141,19 @@ class ARS:
 
 		step = np.zeros(self.weights.shape)
 		for i in range(self.hp.b):
-			step += [reward_p[idx[i]] - reward_n[idx[i]]]*delta[idx[i]]
-
+			step += [reward_p[idx[i]] - reward_n[idx[i]]]*delta[idx[i]] # (reward_p, reward_n, delta) == rollouts
+		
 		sigmaR = np.std(np.array(reward_p)[idx][:self.hp.b] + np.array(reward_n)[idx][:self.hp.b])
+		# divide by standard deviation of the collected rewards (otherwise the variations can be too big): (1st axis of enhancement over BRS)
 		self.weights += self.hp.lr / (self.hp.b*sigmaR) * step
 
 	def sample_delta(self, size):
 		return [np.random.randn(*size) for _ in range(self.hp.N)]
 
 	def save_policy(self):
-		np.savetxt('BipedalWalkerModel.txt', self.weights)
-		self.hp.normalizer.store()
+		# np.savetxt('BipedalWalkerModel.txt', self.weights)
+		# self.hp.normalizer.store()
+		pass ##TODO: here is comment only to test things without messing good weigths
 
 	def train_one_epoch(self):
 		delta = self.sample_delta(self.size)
@@ -155,7 +169,7 @@ class ARS:
 		for counter in range(self.hp.iterations):
 			self.train_one_epoch()
 
-			test_reward, steps = self.agent.test_env(self.env, self.agent.policy, self.weights, self.hp.normalizer, eval_policy=True)
+			test_reward = self.agent.test_env(self.env, self.agent.policy, self.weights, self.hp.normalizer, test_only=True)
 
 			self.plot.rewards += [test_reward]
 			self.plot.rewards_means += [np.mean(self.plot.rewards[-self.hp.test_iterations:])]
