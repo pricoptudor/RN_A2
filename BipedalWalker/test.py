@@ -46,7 +46,7 @@ def test(env, policy, weights, episodes=100, normalizer=None):
 		while not done and steps<5000: ## 5000 is episode_length
 			env.render()
 			if normalizer:
-				state = normalizer.normalize(state)
+				state = normalizer.normalize(state) # we observed the obs space at train and we know its mean and var
 			action = policy(state, weights)
 			next_state, reward, done = env.step(action)
 

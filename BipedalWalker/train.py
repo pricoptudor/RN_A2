@@ -3,6 +3,8 @@ import numpy as np
 
 ### Solving means gettting over 300 points in 100 consecutive trials
 
+### only for simple version, hardcore cannot be trained with ARS!
+
 class BipedalWalker:
 	def __init__(self, render_mode='rgb_array'):
 		self.env = gym.make("BipedalWalker-v3", render_mode=render_mode)
@@ -60,7 +62,7 @@ class Agent:
 		while not done and steps<self.hp.episode_length:  # 5000 is episode length
 			# env.render()	## DON'T RENDER ENVIRONMENT AT TRAINING BRO
 			if normalizer:
-				if not test_only: normalizer.observe(state)
+				if not test_only: normalizer.observe(state) # obs space contains inf so we compute only what we observe
 				state = normalizer.normalize(state)
 			action = policy(state, weights)
 			next_state, reward, done = env.step(action)
@@ -129,11 +131,10 @@ class ARS:
 	# Sort rewards in descending order based on (r(𝜃+𝛎𝜹), r(𝜃-𝛎𝜹)) and use only top b rewards with their perturbations 𝜹
 	#	(for each iteration the small rewards will push down the average of collected rewards r(𝜃+𝛎𝜹), r(𝜃-𝛎𝜹))
 	#	(3rd axis of enhancement over BRS) - (when b==N the algorithm is the same as the one without this enhancement)
+	#   ex: mean of 100 iterations = 300: b==N ~ 1000 steps /|\  b==N/2 ~ 400 steps
 	def sort_directions(self, reward_p, reward_n):
 		reward_max = [max(rp, rn) for rp, rn in zip(reward_p, reward_n)]
-
 		idx = np.argsort(reward_max)[::-1]	# Sort rewards in descending order and get indices.
-
 		return idx
 
 	def update_weights(self, reward_p, reward_n, delta):
@@ -143,6 +144,7 @@ class ARS:
 		for i in range(self.hp.b):
 			step += [reward_p[idx[i]] - reward_n[idx[i]]]*delta[idx[i]] # (reward_p, reward_n, delta) == rollouts
 		
+		# np.array(reward)[idx][:self.hp.b] -> permutation based on sorted idx and take first 'b'
 		sigmaR = np.std(np.array(reward_p)[idx][:self.hp.b] + np.array(reward_n)[idx][:self.hp.b])
 		# divide by standard deviation of the collected rewards (otherwise the variations can be too big): (1st axis of enhancement over BRS)
 		self.weights += self.hp.lr / (self.hp.b*sigmaR) * step
@@ -155,7 +157,7 @@ class ARS:
 		# self.hp.normalizer.store()
 		pass ##TODO: here is comment only to test things without messing good weigths
 
-	def train_one_epoch(self):
+	def train_epoch(self):
 		delta = self.sample_delta(self.size)
 
 		reward_p = [self.agent.test_env(self.env, self.agent.policy, self.weights + self.hp.v*x, normalizer=self.hp.normalizer) for x in delta]
@@ -167,7 +169,7 @@ class ARS:
 		print('Training started...')
 
 		for counter in range(self.hp.iterations):
-			self.train_one_epoch()
+			self.train_epoch()
 
 			test_reward = self.agent.test_env(self.env, self.agent.policy, self.weights, self.hp.normalizer, test_only=True)
 
@@ -218,3 +220,12 @@ if __name__ == '__main__':
 	# profile_app()
 
 	
+'''
+Model-free reinforcement learning (RL) aims to offer off-the-shelf solutions for controlling dynamical systems without requiring models of the system dynamics
+Research papers showed that complicated neural network policies are not needed to solve these continuous control problems
+In the quest to find methods that are sample efficient (i.e. methods that need little data) the general trend has been to develop increasingly complicated methods.
+Aims to optimize reward by directly optimizing over the policy parameters θ. We consider methods which explore in the parameter space rather than the action space
+We demonstrate that a simple random search method can match or exceed state-of-the-art sample efficiency on benchmarks. Moreover, our method is at least 15 times more computationally efficient than Evolution Strategies (ES), the fastest competing method.
+State-of-the-art performance is still uniformly achieved. ARS found policies that achieve significantly higher rewards than any other results we encountered in the literature
+ARS is not highly sensitive to the choice of hyperparameters because its success rate when varying hyperarameters is similar to its success rate when performing independent trials with a “good” choice of hyperparameters.
+'''
